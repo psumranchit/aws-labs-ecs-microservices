@@ -6,6 +6,8 @@
 - Create Repo for all docker images. I created 5 repos in this case for my 5 simple APIs using Python Flask and can be found in `./apis/` folder.
 - Build and push all APIs to docker images using following cmd.
 
+> Repository Name **must match** path specify in the code. Ex. Repository name for `list-api` must be `country-list` as the path specify in the code is `/country-list`
+
   - Login to AWS ECR
   ~~~
   aws ecr get-login-password --region <Region> | docker login --username AWS --password-stdin <AccountId>.dkr.ecr.<Region>.amazonaws.com
@@ -31,4 +33,4 @@
   - TaskDefinitions for all API
   - Services for all API
 
-  > TaskDefinition Name parameters provided during the CloudFormation creating **must be the same as** ECR Repositories Name created in `Step 1`
+  > TaskDefinition Name parameters provided during the CloudFormation creation **must match** ECR Repositories Name created in `Step 1`
