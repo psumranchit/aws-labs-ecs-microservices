@@ -12,7 +12,7 @@
   ~~~
   - Build docker image
   ~~~
-  docker build -t <api-name>:latest <AccountId>.dkr.ecr.<Region>.amazonaws.com/<api-name>:latest .
+  docker build -t <AccountId>.dkr.ecr.<Region>.amazonaws.com/<api-name>:latest .
   ~~~
   - Push image to ECR repos
   ~~~
