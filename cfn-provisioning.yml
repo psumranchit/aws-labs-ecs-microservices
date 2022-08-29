@@ -746,16 +746,16 @@ Resources:
 ##################
 Outputs:
   Task1TestingUrl:
-    Value: !Sub 'Alb.DNSName:${ContainerPort}/${TaskDefinition1}'
+    Value: !Sub '${Alb.DNSName}:${ContainerPort}/${TaskDefinition1}'
 
   Task2TestingUrl:
-    Value: !Sub 'Alb.DNSName:${ContainerPort}/${TaskDefinition2}'
+    Value: !Sub '${Alb.DNSName}:${ContainerPort}/${TaskDefinition2}'
 
   Task3TestingUrl:
-    Value: !Sub 'Alb.DNSName:${ContainerPort}/${TaskDefinition3}'
+    Value: !Sub '${Alb.DNSName}:${ContainerPort}/${TaskDefinition3}'
 
   Task4TestingUrl:
-    Value: !Sub 'Alb.DNSName:${ContainerPort}/${TaskDefinition4}'
+    Value: !Sub '${Alb.DNSName}:${ContainerPort}/${TaskDefinition4}'
 
   Task5TestingUrl:
-    Value: !Sub 'Alb.DNSName:${ContainerPort}/${TaskDefinition5}'
+    Value: !Sub '${Alb.DNSName}:${ContainerPort}/${TaskDefinition5}'
