@@ -637,6 +637,8 @@ Resources:
       PlacementStrategies:
         - Type: spread
           Field: host
+        - Type: spread
+          Field: attribute:ecs.availability-zone
       TaskDefinition: !Ref EcsTaskDefinition1
       ServiceName: !Sub '${TaskDefinition1}-service'
       Role: !Ref EcsServiceRole
@@ -661,6 +663,8 @@ Resources:
       PlacementStrategies:
         - Type: spread
           Field: host
+        - Type: spread
+          Field: attribute:ecs.availability-zone
       TaskDefinition: !Ref EcsTaskDefinition2
       ServiceName: !Sub '${TaskDefinition2}-service'
       Role: !Ref EcsServiceRole
@@ -685,6 +689,8 @@ Resources:
       PlacementStrategies:
         - Type: spread
           Field: host
+        - Type: spread
+          Field: attribute:ecs.availability-zone
       TaskDefinition: !Ref EcsTaskDefinition3
       ServiceName: !Sub '${TaskDefinition3}-service'
       Role: !Ref EcsServiceRole
@@ -709,6 +715,8 @@ Resources:
       PlacementStrategies:
         - Type: spread
           Field: host
+        - Type: spread
+          Field: attribute:ecs.availability-zone
       TaskDefinition: !Ref EcsTaskDefinition4
       ServiceName: !Sub '${TaskDefinition4}-service'
       Role: !Ref EcsServiceRole
@@ -733,6 +741,8 @@ Resources:
       PlacementStrategies:
         - Type: spread
           Field: host
+        - Type: spread
+          Field: attribute:ecs.availability-zone
       TaskDefinition: !Ref EcsTaskDefinition5
       ServiceName: !Sub '${TaskDefinition5}-service'
       Role: !Ref EcsServiceRole
