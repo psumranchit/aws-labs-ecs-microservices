@@ -8,7 +8,7 @@ app = Flask(__name__)
 def health_check():
     return '', 200
 
-@app.route('/wiki/<name>')
+@app.route('/country-wiki/<name>')
 def get_year(name):
     return str(countries[name]['wiki'])
 

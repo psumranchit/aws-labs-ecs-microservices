@@ -8,7 +8,7 @@ app = Flask(__name__)
 def health_check():
     return '', 200
 
-@app.route('/pop/<name>')
+@app.route('/country-population/<name>')
 def get_contribution(name):
     return str(countries[name]['population'])
 if __name__ == "__main__":

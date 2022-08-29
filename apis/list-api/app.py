@@ -8,7 +8,7 @@ app = Flask(__name__)
 def health_check():
     return '', 200
 
-@app.get('/list')
+@app.get('/country-list')
 def list_all():
     less_than = request.args.get('lt') or '2000000000'
     greater_than = request.args.get('gt') or '0'

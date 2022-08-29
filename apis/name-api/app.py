@@ -8,7 +8,7 @@ app = Flask(__name__)
 def health_check():
     return '', 200
 
-@app.route('/name/<name>')
+@app.route('/country-name/<name>')
 def get_name(name):
     return countries[name]
 
