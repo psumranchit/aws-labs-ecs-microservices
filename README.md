@@ -18,4 +18,4 @@
   ~~~
   docker push <AccountId>.dkr.ecr.<Region>.amazonaws.com/<api-name>:latest
   ~~~
-- Repeat the step for all APIs.
+- Repeat the `docker build` and 'docker push` step for all APIs.
