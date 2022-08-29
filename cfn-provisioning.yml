@@ -1,0 +1,761 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Cloudformation for Unit Testing
+
+Parameters:
+  
+  ### EC2 Container Instances Parameters ###
+  LatestAmiId:
+    Description: Gets the latest AMI from Systems Manager Parameter store
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id'
+
+  KeyName:
+    Description: Key Pair to access EC2 container instances
+    Type: String
+    Default: peanuts-ap-southeast-1
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t3.micro
+      - t3.small
+
+  ### ASG Parameters ###
+  MinInstance:
+    Description: Minimum Numbers of Stage instance
+    Type: String
+    Default: '2'
+
+  DesiredInstance:
+    Description: Desired Numbers of Stage instance
+    Type: String
+    Default: '2'
+
+  MaxInstance:
+    Description: Maximum Numbers of Stage instance
+    Type: String
+    Default: '2'
+
+  ### VPC Parameters ###
+  VPCCidrBlock:
+    Description: VPC CIDR block
+    Type: String
+    Default: '192.168.0.0/16'
+
+  PublicCidrBlock1:
+    Description: Public Subnet 1 CIDR
+    Type: String
+    Default: '192.168.1.0/24'
+
+  PublicCidrBlock2:
+    Description: Public Subnet 1 CIDR
+    Type: String
+    Default: '192.168.2.0/24'
+
+  ManagementPublicIP:
+    Description: Your Public IP Address (xx.xx.xx.xx/xx)
+    Type: String
+    Default: '0.0.0.0/0'
+
+  ### ECS Parameters ###
+  TaskDefinition1:
+    Description: Task Definition Name
+    Type: String
+    Default: 'country-capital'
+
+  TaskDefinition2:
+    Description: Task Definition Name
+    Type: String
+    Default: 'country-list'
+
+  TaskDefinition3:
+    Description: Task Definition Name
+    Type: String
+    Default: 'country-name'
+
+  TaskDefinition4:
+    Description: Task Definition Name
+    Type: String
+    Default: 'country-population'
+
+  TaskDefinition5:
+    Description: Task Definition Name
+    Type: String
+    Default: 'country-wiki'
+
+  ContainerPort:
+    Description: Container Service Expose Port
+    Type: String
+    Default: '5000'
+
+  MaxCpu:
+    Description: Max CPU capacity for each container
+    Type: String
+    Default: '128'
+
+  MaxMem:
+    Description: Max Memory capacity for each container
+    Type: String
+    Default: '128'
+
+  DesiredContainerNumber:
+    Description: Initial Desired Number of each container service
+    Type: String
+    Default: 2
+
+Resources:
+
+  ### Creating VPC ###
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - vpc
+
+  ### Creating IGW for ingress/egress traffic ###
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - igw
+
+  ### Attaching IGW to VPC ###
+  IGWAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+
+  ### Creating new route table for VPC ###
+  InternetRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - public
+              - rt
+
+  ### Adding Route to/from Internet ###
+  InternetRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+      RouteTableId: !Ref InternetRouteTable
+
+  ### Creating Public Subnet ###
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+          Ref: 'AWS::Region'
+      CidrBlock: !Ref PublicCidrBlock1
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - !Ref PublicCidrBlock1
+              - public
+              - az1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+          Ref: 'AWS::Region'
+      CidrBlock: !Ref PublicCidrBlock2
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - !Ref PublicCidrBlock2
+              - public
+              - az2
+
+  ### Add Subnet CIDR to public route table
+  PublicSubnet1RouteToInternet:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref InternetRouteTable
+      SubnetId: !Ref PublicSubnet1
+    DependsOn:
+      - PublicSubnet1
+      - InternetRouteTable
+
+  PublicSubnet2RouteToInternet:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref InternetRouteTable
+      SubnetId: !Ref PublicSubnet2
+    DependsOn:
+      - PublicSubnet2
+      - InternetRouteTable
+
+  ### Creating Security Group ###
+  Ec2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupName: !Join
+        - '-'
+        - - !Ref AWS::StackName
+          - ec2
+          - sg
+      GroupDescription: 'Allows all traffic from ALB'
+      SecurityGroupIngress:
+        - IpProtocol: '-1'
+          SourceSecurityGroupId: !GetAtt AlbSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - EC2
+              - sg
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupName: !Join
+        - '-'
+        - - !Ref AWS::StackName
+          - alb
+          - sg
+      GroupDescription: !Sub 'Allows TCP port ${ContainerPort} access'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          CidrIp: !Ref ManagementPublicIP
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - alb
+              - sg
+
+  ### Create Launch Template for ASG
+  Ec2LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: !Sub ${AWS::StackName}-lt
+      LaunchTemplateData:
+        ImageId: !Ref LatestAmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Arn: !GetAtt Ec2InstanceProfile.Arn
+        SecurityGroupIds:
+          - !GetAtt Ec2SecurityGroup.GroupId
+        UserData:
+          Fn::Base64:
+            !Sub |
+              #!/bin/bash
+              echo ECS_CLUSTER=${AWS::StackName} >> /etc/ecs/ecs.config
+
+  ### Creating EC2 InstanceProfile
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Ref EcsInstanceRole
+      Path: '/'
+      Roles:
+        - !Ref EcsInstanceRole
+    DependsOn: EcsInstanceRole
+
+  ### Creating IAM Role for EC2
+  EcsInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: '/'
+      RoleName: !Sub '${AWS::StackName}-ecs-instance-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role'
+
+  ### Creating ASG ###
+  Asg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub '${AWS::StackName}-asg'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Ec2LaunchTemplate
+        Version: !GetAtt Ec2LaunchTemplate.LatestVersionNumber
+      MaxSize: !Ref MaxInstance
+      MinSize: !Ref MinInstance
+      DesiredCapacity: !Ref DesiredInstance
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      # TargetGroupARNs:
+      #   - !Sub 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:${StageTargetGroup.TargetGroupFullName}'
+    DependsOn:
+      - Ec2LaunchTemplate
+      - EcsCluster
+
+  ### Create empty ECS Cluster
+  EcsCluster:
+    Type: 'AWS::ECS::Cluster'
+    Properties:
+      ClusterName: !Ref AWS::StackName
+
+  ### Create Task Definition Role ###
+  TaskDefinitionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: '/'
+      RoleName: !Sub '${AWS::StackName}-task-definition-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+
+  ### Create ECS Service Role ###
+  EcsServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: '/'
+      RoleName: !Sub '${AWS::StackName}-service-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ecs.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole'
+
+  ### Register Task Definitions ###
+  EcsTaskDefinition1: 
+    Type: AWS::ECS::TaskDefinition
+    Properties: 
+      Family: !Ref TaskDefinition1
+      ContainerDefinitions: 
+        - Name: !Ref TaskDefinition1
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${TaskDefinition1}:latest'
+          Cpu: !Ref MaxCpu
+          PortMappings: 
+            - ContainerPort: !Ref ContainerPort
+          Memory: !Ref MaxMem
+          Essential: true
+      ExecutionRoleArn: !GetAtt TaskDefinitionRole.Arn
+
+  EcsTaskDefinition2: 
+    Type: AWS::ECS::TaskDefinition
+    Properties: 
+      Family: !Ref TaskDefinition2
+      ContainerDefinitions: 
+        - Name: !Ref TaskDefinition2
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${TaskDefinition2}:latest'
+          Cpu: !Ref MaxCpu
+          PortMappings: 
+            - ContainerPort: !Ref ContainerPort
+          Memory: !Ref MaxMem
+          Essential: true
+      ExecutionRoleArn: !GetAtt TaskDefinitionRole.Arn
+
+  EcsTaskDefinition3: 
+    Type: AWS::ECS::TaskDefinition
+    Properties: 
+      Family: !Ref TaskDefinition3
+      ContainerDefinitions: 
+        - Name: !Ref TaskDefinition3
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${TaskDefinition3}:latest'
+          Cpu: !Ref MaxCpu
+          PortMappings: 
+            - ContainerPort: !Ref ContainerPort
+          Memory: !Ref MaxMem
+          Essential: true
+      ExecutionRoleArn: !GetAtt TaskDefinitionRole.Arn
+
+  EcsTaskDefinition4: 
+    Type: AWS::ECS::TaskDefinition
+    Properties: 
+      Family: !Ref TaskDefinition4
+      ContainerDefinitions: 
+        - Name: !Ref TaskDefinition4
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${TaskDefinition4}:latest'
+          Cpu: !Ref MaxCpu
+          PortMappings: 
+            - ContainerPort: !Ref ContainerPort
+          Memory: !Ref MaxMem
+          Essential: true
+      ExecutionRoleArn: !GetAtt TaskDefinitionRole.Arn
+
+  EcsTaskDefinition5: 
+    Type: AWS::ECS::TaskDefinition
+    Properties: 
+      Family: !Ref TaskDefinition5
+      ContainerDefinitions: 
+        - Name: !Ref TaskDefinition5
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${TaskDefinition5}:latest'
+          Cpu: !Ref MaxCpu
+          PortMappings: 
+            - ContainerPort: !Ref ContainerPort
+          Memory: !Ref MaxMem
+          Essential: true
+      ExecutionRoleArn: !GetAtt TaskDefinitionRole.Arn
+
+  ### Creating Target Group for each Services ###
+  TargetGroupService1:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 15
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: '200'
+      Name: !Sub '${TaskDefinition1}-tg'
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '20'
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VPC
+
+  TargetGroupService2:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 15
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: '200'
+      Name: !Sub '${TaskDefinition2}-tg'
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '20'
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VPC
+
+  TargetGroupService3:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 15
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: '200'
+      Name: !Sub '${TaskDefinition3}-tg'
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '20'
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VPC
+
+  TargetGroupService4:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 15
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: '200'
+      Name: !Sub '${TaskDefinition4}-tg'
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '20'
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VPC
+
+  TargetGroupService5:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 15
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: '200'
+      Name: !Sub '${TaskDefinition5}-tg'
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '20'
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VPC
+
+ ### Creating ALB Listener ###
+  AlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroupService5
+      LoadBalancerArn: !Ref Alb
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+
+  ### Creating ALB Listen Path-base rules ###
+  ListenerRule1:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Sub 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:${TargetGroupService1.TargetGroupFullName}'
+      Conditions:
+        - Field: path-pattern
+          Values:
+              - !Sub '/${TaskDefinition1}*'
+      ListenerArn: !Ref AlbListener
+      Priority: 1
+
+  ListenerRule2:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Sub 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:${TargetGroupService2.TargetGroupFullName}'
+      Conditions:
+        - Field: path-pattern
+          Values:
+              - !Sub '/${TaskDefinition2}*'
+      ListenerArn: !Ref AlbListener
+      Priority: 2
+
+  ListenerRule3:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Sub 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:${TargetGroupService3.TargetGroupFullName}'
+      Conditions:
+        - Field: path-pattern
+          Values:
+              - !Sub '/${TaskDefinition3}*'
+      ListenerArn: !Ref AlbListener
+      Priority: 3
+
+  ListenerRule4:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Sub 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:${TargetGroupService4.TargetGroupFullName}'
+      Conditions:
+        - Field: path-pattern
+          Values:
+              - !Sub '/${TaskDefinition4}*'
+      ListenerArn: !Ref AlbListener
+      Priority: 4
+
+  ListenerRule5:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Sub 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:${TargetGroupService5.TargetGroupFullName}'
+      Conditions:
+        - Field: path-pattern
+          Values:
+              - !Sub '/${TaskDefinition5}*'
+      ListenerArn: !Ref AlbListener
+      Priority: 5
+
+  ### Creating ALB ###
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets:
+      - !Ref PublicSubnet1
+      - !Ref PublicSubnet2
+      SecurityGroups:
+        - !GetAtt AlbSecurityGroup.GroupId
+
+  ### Creating ECS Services ###
+  EcsService1:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref EcsCluster
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DesiredCount: !Ref DesiredContainerNumber
+      HealthCheckGracePeriodSeconds: 300
+      LoadBalancers:
+        - ContainerName: !Ref TaskDefinition1
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroupService1
+      PlacementStrategies:
+        - Type: spread
+          Field: host
+      TaskDefinition: !Ref EcsTaskDefinition1
+      ServiceName: !Sub '${TaskDefinition1}-service'
+      Role: !Ref EcsServiceRole
+    DependsOn:
+      - EcsTaskDefinition1
+      - ListenerRule1
+      - Alb
+
+  EcsService2:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref EcsCluster
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DesiredCount: !Ref DesiredContainerNumber
+      HealthCheckGracePeriodSeconds: 300
+      LoadBalancers:
+        - ContainerName: !Ref TaskDefinition2
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroupService2
+      PlacementStrategies:
+        - Type: spread
+          Field: host
+      TaskDefinition: !Ref EcsTaskDefinition2
+      ServiceName: !Sub '${TaskDefinition2}-service'
+      Role: !Ref EcsServiceRole
+    DependsOn:
+      - EcsTaskDefinition2
+      - ListenerRule2
+      - Alb
+
+  EcsService3:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref EcsCluster
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DesiredCount: !Ref DesiredContainerNumber
+      HealthCheckGracePeriodSeconds: 300
+      LoadBalancers:
+        - ContainerName: !Ref TaskDefinition3
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroupService3
+      PlacementStrategies:
+        - Type: spread
+          Field: host
+      TaskDefinition: !Ref EcsTaskDefinition3
+      ServiceName: !Sub '${TaskDefinition3}-service'
+      Role: !Ref EcsServiceRole
+    DependsOn:
+      - EcsTaskDefinition3
+      - ListenerRule3
+      - Alb
+
+  EcsService4:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref EcsCluster
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DesiredCount: !Ref DesiredContainerNumber
+      HealthCheckGracePeriodSeconds: 300
+      LoadBalancers:
+        - ContainerName: !Ref TaskDefinition4
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroupService4
+      PlacementStrategies:
+        - Type: spread
+          Field: host
+      TaskDefinition: !Ref EcsTaskDefinition4
+      ServiceName: !Sub '${TaskDefinition4}-service'
+      Role: !Ref EcsServiceRole
+    DependsOn:
+      - EcsTaskDefinition4
+      - ListenerRule4
+      - Alb
+
+  EcsService5:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref EcsCluster
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DesiredCount: !Ref DesiredContainerNumber
+      HealthCheckGracePeriodSeconds: 300
+      LoadBalancers:
+        - ContainerName: !Ref TaskDefinition5
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroupService5
+      PlacementStrategies:
+        - Type: spread
+          Field: host
+      TaskDefinition: !Ref EcsTaskDefinition5
+      ServiceName: !Sub '${TaskDefinition5}-service'
+      Role: !Ref EcsServiceRole
+    DependsOn:
+      - EcsTaskDefinition5
+      - ListenerRule5
+      - Alb
+
+##################
+# Output Section #
+##################
+Outputs:
+  Task1TestingUrl:
+    Value: !Sub 'Alb.DNSName:${ContainerPort}/${TaskDefinition1}'
+
+  Task2TestingUrl:
+    Value: !Sub 'Alb.DNSName:${ContainerPort}/${TaskDefinition2}'
+
+  Task3TestingUrl:
+    Value: !Sub 'Alb.DNSName:${ContainerPort}/${TaskDefinition3}'
+
+  Task4TestingUrl:
+    Value: !Sub 'Alb.DNSName:${ContainerPort}/${TaskDefinition4}'
+
+  Task5TestingUrl:
+    Value: !Sub 'Alb.DNSName:${ContainerPort}/${TaskDefinition5}'
