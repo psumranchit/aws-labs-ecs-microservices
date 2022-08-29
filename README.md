@@ -12,11 +12,7 @@
   ~~~
   - Build docker image
   ~~~
-  docker build -t <api-name> .
-  ~~~
-  - Tag docker image so you can push to ECR
-  ~~~
-  docker tag <api-name>:latest <AccountId>.dkr.ecr.<Region>.amazonaws.com/<api-name>:latest
+  docker build -t <api-name>:latest <AccountId>.dkr.ecr.<Region>.amazonaws.com/<api-name>:latest .
   ~~~
   - Push image to ECR repos
   ~~~
