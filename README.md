@@ -30,4 +30,5 @@
   - ALB and TargetGroups. Each TargetGroups for each ECS Services
   - TaskDefinitions for all API
   - Services for all API
-  >> TaskDefinition Name parameters provided during the CloudFormation creating **must be the same as** ECR Repositories Name created in `Step 1`
+
+  > TaskDefinition Name parameters provided during the CloudFormation creating **must be the same as** ECR Repositories Name created in `Step 1`
