@@ -33,4 +33,4 @@
   - TaskDefinitions for all API
   - Services for all API
 
-  > TaskDefinition Name parameters provided during the CloudFormation creation **must match** ECR Repositories Name created in `Step 1`
+> TaskDefinition Name parameters provided during the CloudFormation creation **must match** ECR Repositories Name created in `Step 1`
