@@ -8,7 +8,7 @@
 
   - Login to AWS ECR
   ~~~
-  aws ecr get-login-password --region <Region> | docker login --username AWS --password-stdin <AccountId>.dkr.ecr.ap-southeast-1.amazonaws.com
+  aws ecr get-login-password --region <Region> | docker login --username AWS --password-stdin <AccountId>.dkr.ecr.<Region>.amazonaws.com
   ~~~
   - Build docker image
   ~~~
