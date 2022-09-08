@@ -1,7 +1,10 @@
 from flask import Flask, request
 from database import countries
+from flask_cors import CORS, cross_origin
 
 app = Flask(__name__)
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 
 # return 200 for health check
 @app.get('/')
